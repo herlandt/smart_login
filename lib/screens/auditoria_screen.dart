@@ -20,23 +20,33 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
   }
 
   Future<void> cargarAuditoria() async {
+    if (!mounted) return;
+
     setState(() {
       loading = true;
       error = null;
     });
     try {
-      final res = await ApiService().fetchAuditoriaHistorial();
-      setState(() {
-        historial = res;
-      });
+      final res = await ApiService()
+          .get('/api/auditoria/historial/')
+          .catchError((e) => <dynamic>[]);
+      if (mounted) {
+        setState(() {
+          historial = res is List ? res : <dynamic>[];
+        });
+      }
     } catch (e) {
-      setState(() {
-        error = e.toString();
-      });
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+        });
+      }
     } finally {
-      setState(() {
-        loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
     }
   }
 

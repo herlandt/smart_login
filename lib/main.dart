@@ -33,17 +33,30 @@ class AppRoot extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: FutureBuilder<bool>(
-        future: _hasToken(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          return snapshot.data! ? const MainMenuScreen() : const LoginScreen();
-        },
-      ),
+      routes: {
+        '/': (context) => FutureBuilder<bool>(
+              future: _hasToken(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return snapshot.data! ? const MainMenuScreen() : const LoginScreen();
+              },
+            ),
+        '/login': (context) => const LoginScreen(),
+        '/main': (context) => const MainMenuScreen(),
+        '/avisos': (context) => const AvisosScreen(),
+        '/perfil': (context) => const PerfilScreen(),
+        '/mantenimiento': (context) => const MantenimientoScreen(),
+        '/seguridad': (context) => const SeguridadScreen(),
+        '/finanzas': (context) => const FinanzasScreen(),
+        '/condominio': (context) => const CondominioScreen(),
+        '/auditoria': (context) => const AuditoriaScreen(),
+        '/notificaciones': (context) => const NotificacionesScreen(),
+      },
+      initialRoute: '/',
     );
   }
 }
@@ -207,37 +220,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 
   void _navigateToScreen(String route) {
-    Widget screen;
-    switch (route) {
-      case "/avisos":
-        screen = const AvisosScreen();
-        break;
-      case "/perfil":
-        screen = const PerfilScreen();
-        break;
-      case "/mantenimiento":
-        screen = const MantenimientoScreen();
-        break;
-      case "/seguridad":
-        screen = const SeguridadScreen();
-        break;
-      case "/finanzas":
-        screen = const FinanzasScreen();
-        break;
-      case "/condominio":
-        screen = const CondominioScreen();
-        break;
-      case "/auditoria":
-        screen = const AuditoriaScreen();
-        break;
-      case "/notificaciones":
-        screen = const NotificacionesScreen();
-        break;
-      default:
-        return;
-    }
-
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => screen));
+    Navigator.pushNamed(context, route);
   }
 }
 

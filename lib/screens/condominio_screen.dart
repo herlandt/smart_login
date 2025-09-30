@@ -13,6 +13,7 @@ class _CondominioScreenState extends State<CondominioScreen> {
   List<dynamic>? areasComunes;
   List<dynamic>? avisos;
   List<dynamic>? reglas;
+  List<dynamic>? reservas;
   bool loading = true;
   String? error;
 
@@ -23,30 +24,47 @@ class _CondominioScreenState extends State<CondominioScreen> {
   }
 
   Future<void> cargarCondominio() async {
+    if (!mounted) return;
+
     setState(() {
       loading = true;
       error = null;
     });
     try {
       final api = ApiService();
-      final resPropiedades = await api.fetchPropiedades();
-      final resAreasComunes = await api.fetchAreasComunes();
-      final resAvisos = await api.get('/condominio/avisos/');
-      final resReglas = await api.fetchReglas();
-      setState(() {
-        propiedades = resPropiedades;
-        areasComunes = resAreasComunes;
-        avisos = resAvisos['data'] ?? [];
-        reglas = resReglas;
-      });
+      final futures = await Future.wait([
+        api.fetchPropiedades().catchError((e) => <dynamic>[]),
+        api.fetchAreasComunes().catchError((e) => <dynamic>[]),
+        api.get('/api/condominio/avisos/').catchError((e) => <dynamic>[]),
+        api.fetchReglas().catchError((e) => <dynamic>[]),
+        api.fetchReservas().catchError((e) => <dynamic>[]),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          propiedades = futures[0] is List ? futures[0] : <dynamic>[];
+          areasComunes = futures[1] is List ? futures[1] : <dynamic>[];
+          avisos = futures[2] is List
+              ? futures[2]
+              : (futures[2] is Map && futures[2]['data'] != null
+                    ? futures[2]['data']
+                    : <dynamic>[]);
+          reglas = futures[3] is List ? futures[3] : <dynamic>[];
+          reservas = futures[4] is List ? futures[4] : <dynamic>[];
+        });
+      }
     } catch (e) {
-      setState(() {
-        error = e.toString();
-      });
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+        });
+      }
     } finally {
-      setState(() {
-        loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
     }
   }
 
@@ -94,7 +112,16 @@ class _CondominioScreenState extends State<CondominioScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Condominio')),
+      appBar: AppBar(
+        title: Text('Condominio'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_box),
+            onPressed: () => _mostrarDialogoReserva(),
+            tooltip: 'Nueva Reserva',
+          ),
+        ],
+      ),
       body: loading
           ? Center(child: CircularProgressIndicator())
           : error != null
@@ -112,8 +139,9 @@ class _CondominioScreenState extends State<CondominioScreen> {
                   buildList(
                     'Áreas Comunes',
                     areasComunes,
-                    (item) => 'Tipo: ${item['tipo'] ?? ''}',
+                    (item) => 'Tipo: ${item['tipo'] ?? ''} - ${item['disponible'] == true ? 'Disponible' : 'No disponible'}',
                   ),
+                  buildReservasList(),
                   buildList(
                     'Avisos',
                     avisos,
@@ -128,5 +156,251 @@ class _CondominioScreenState extends State<CondominioScreen> {
               ),
             ),
     );
+  }
+
+  Widget buildReservasList() {
+    if (reservas == null) return const SizedBox.shrink();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Mis Reservas',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _mostrarDialogoReserva(),
+                icon: const Icon(Icons.add),
+                label: const Text('Reservar'),
+              ),
+            ],
+          ),
+        ),
+        if (reservas!.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text('No tienes reservas'),
+          )
+        else
+          ...reservas!.map(
+            (reserva) => Card(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              child: ListTile(
+                leading: Icon(
+                  Icons.event,
+                  color: _getEstadoColor(reserva['estado']),
+                ),
+                title: Text(
+                  reserva['area_comun']?['nombre'] ?? 'Área común',
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Fecha: ${reserva['fecha'] ?? ''}'),
+                    Text('Hora: ${reserva['hora_inicio'] ?? ''} - ${reserva['hora_fin'] ?? ''}'),
+                    Text('Estado: ${reserva['estado'] ?? 'Pendiente'}'),
+                  ],
+                ),
+                trailing: reserva['estado'] == 'pendiente'
+                    ? IconButton(
+                        icon: const Icon(Icons.cancel, color: Colors.red),
+                        onPressed: () => _cancelarReserva(reserva['id']),
+                      )
+                    : null,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Color _getEstadoColor(String? estado) {
+    switch (estado) {
+      case 'confirmada':
+        return Colors.green;
+      case 'cancelada':
+        return Colors.red;
+      case 'pendiente':
+      default:
+        return Colors.orange;
+    }
+  }
+
+  void _mostrarDialogoReserva() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        DateTime fechaSeleccionada = DateTime.now();
+        TimeOfDay horaInicio = TimeOfDay.now();
+        TimeOfDay horaFin = TimeOfDay(hour: TimeOfDay.now().hour + 1, minute: TimeOfDay.now().minute);
+        dynamic areaSeleccionada;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Nueva Reserva'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField(
+                      decoration: const InputDecoration(
+                        labelText: 'Área Común',
+                        border: OutlineInputBorder(),
+                      ),
+                      value: areaSeleccionada,
+                      items: areasComunes?.where((area) => area['disponible'] == true).map((area) {
+                        return DropdownMenuItem(
+                          value: area,
+                          child: Text(area['nombre'] ?? 'Sin nombre'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          areaSeleccionada = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      title: const Text('Fecha'),
+                      subtitle: Text('${fechaSeleccionada.day}/${fechaSeleccionada.month}/${fechaSeleccionada.year}'),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final fecha = await showDatePicker(
+                          context: context,
+                          initialDate: fechaSeleccionada,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 30)),
+                        );
+                        if (fecha != null) {
+                          setState(() {
+                            fechaSeleccionada = fecha;
+                          });
+                        }
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Hora de inicio'),
+                      subtitle: Text('${horaInicio.hour}:${horaInicio.minute.toString().padLeft(2, '0')}'),
+                      trailing: const Icon(Icons.access_time),
+                      onTap: () async {
+                        final hora = await showTimePicker(
+                          context: context,
+                          initialTime: horaInicio,
+                        );
+                        if (hora != null) {
+                          setState(() {
+                            horaInicio = hora;
+                          });
+                        }
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Hora de fin'),
+                      subtitle: Text('${horaFin.hour}:${horaFin.minute.toString().padLeft(2, '0')}'),
+                      trailing: const Icon(Icons.access_time),
+                      onTap: () async {
+                        final hora = await showTimePicker(
+                          context: context,
+                          initialTime: horaFin,
+                        );
+                        if (hora != null) {
+                          setState(() {
+                            horaFin = hora;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (areaSeleccionada != null) {
+                      _crearReserva(
+                        areaSeleccionada['id'],
+                        fechaSeleccionada,
+                        horaInicio,
+                        horaFin,
+                      );
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: const Text('Reservar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _crearReserva(int areaId, DateTime fecha, TimeOfDay horaInicio, TimeOfDay horaFin) async {
+    try {
+      final api = ApiService();
+      await api.post('api/finanzas/reservas/', {
+        'area_comun_id': areaId,
+        'fecha': '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}',
+        'hora_inicio': '${horaInicio.hour.toString().padLeft(2, '0')}:${horaInicio.minute.toString().padLeft(2, '0')}',
+        'hora_fin': '${horaFin.hour.toString().padLeft(2, '0')}:${horaFin.minute.toString().padLeft(2, '0')}',
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reserva creada exitosamente'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        cargarCondominio();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al crear reserva: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _cancelarReserva(int reservaId) async {
+    try {
+      final api = ApiService();
+      await api.post('api/finanzas/reservas/$reservaId/cancelar/', {});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reserva cancelada'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        cargarCondominio();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cancelar reserva: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
