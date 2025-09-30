@@ -23,7 +23,7 @@ class _AvisosScreenState extends State<AvisosScreen> {
 
   bool _loading = false;
   String? _error;
-  String? _usado;            // para mostrar qué ruta funcionó
+  String? _usado; // para mostrar qué ruta funcionó
   List<dynamic> _items = [];
 
   @override
@@ -38,25 +38,37 @@ class _AvisosScreenState extends State<AvisosScreen> {
   }
 
   Future<void> _fetchAvisos() async {
-    setState(() { _loading = true; _error = null; _usado = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+      _usado = null;
+    });
 
     final t = await _token();
     if (t == null || t.isEmpty) {
-      setState(() { _error = 'No hay token. Inicia sesión.'; _loading = false; });
+      setState(() {
+        _error = 'No hay token. Inicia sesión.';
+        _loading = false;
+      });
       return;
     }
 
     Exception? lastErr;
     for (final ep in _candidatos) {
-      final uri = Uri.parse('${base.replaceAll(RegExp(r"/$"), "")}'
-          '${ep.startsWith("/") ? ep : "/$ep"}');
+      final uri = Uri.parse(
+        '${base.replaceAll(RegExp(r"/$"), "")}'
+        '${ep.startsWith("/") ? ep : "/$ep"}',
+      );
 
       try {
-        final r = await http.get(uri, headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json; charset=UTF-8',
-          'Authorization': 'Token $t',
-        });
+        final r = await http.get(
+          uri,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Authorization': 'Token $t',
+          },
+        );
 
         if (r.statusCode == 200) {
           final data = jsonDecode(utf8.decode(r.bodyBytes));
@@ -68,7 +80,7 @@ class _AvisosScreenState extends State<AvisosScreen> {
           });
           return; // éxito
         } else {
-          lastErr = Exception('HTTP ${r.statusCode} ${uri}\n${r.body}');
+          lastErr = Exception('HTTP ${r.statusCode} $uri\n${r.body}');
         }
       } catch (e) {
         lastErr = Exception('$e');
@@ -84,7 +96,9 @@ class _AvisosScreenState extends State<AvisosScreen> {
   String _fmt(dynamic v) {
     try {
       final dt = DateTime.tryParse(v?.toString() ?? '');
-      if (dt != null) return DateFormat('dd/MM/yyyy HH:mm').format(dt.toLocal());
+      if (dt != null) {
+        return DateFormat('dd/MM/yyyy HH:mm').format(dt.toLocal());
+      }
       return v?.toString() ?? '';
     } catch (_) {
       return v?.toString() ?? '';
@@ -98,50 +112,69 @@ class _AvisosScreenState extends State<AvisosScreen> {
         title: const Text('Avisos'),
         actions: [
           if (_usado != null)
-            Center(child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(_usado!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            )),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  _usado!,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+            ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchAvisos),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SelectableText(_error!, style: const TextStyle(color: Colors.red)),
-                )
-              : _items.isEmpty
-                  ? const Center(child: Text('No hay avisos.'))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: _items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) {
-                        final m = (_items[i] as Map?) ?? {};
-                        final titulo = (m['titulo'] ?? m['title'] ?? m['asunto'] ?? '').toString();
-                        final cuerpo = (m['mensaje'] ?? m['descripcion'] ?? m['cuerpo'] ?? '').toString();
-                        final fecha = _fmt(m['created_at'] ?? m['fecha'] ?? m['creado']);
-                        return Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.campaign),
-                            title: Text(titulo.isEmpty ? '(sin título)' : titulo),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (cuerpo.isNotEmpty) Text(cuerpo),
-                                if (fecha.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(fecha, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                  ),
-                              ],
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(
+                _error!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            )
+          : _items.isEmpty
+          ? const Center(child: Text('No hay avisos.'))
+          : ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: _items.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) {
+                final m = (_items[i] as Map?) ?? {};
+                final titulo = (m['titulo'] ?? m['title'] ?? m['asunto'] ?? '')
+                    .toString();
+                final cuerpo =
+                    (m['mensaje'] ?? m['descripcion'] ?? m['cuerpo'] ?? '')
+                        .toString();
+                final fecha = _fmt(
+                  m['created_at'] ?? m['fecha'] ?? m['creado'],
+                );
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.campaign),
+                    title: Text(titulo.isEmpty ? '(sin título)' : titulo),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (cuerpo.isNotEmpty) Text(cuerpo),
+                        if (fecha.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              fecha,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
                             ),
                           ),
-                        );
-                      },
+                      ],
                     ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
