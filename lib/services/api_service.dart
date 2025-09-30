@@ -51,7 +51,7 @@ class ApiService {
 
   // ============== AUTENTICACIÓN ==============
   Future<Map<String, dynamic>> login(String username, String password) async {
-    final uri = Uri.parse('$baseUrl/api/login/');
+    final uri = Uri.parse('$baseUrl/api/usuarios/login/');
     final res = await http.post(
       uri,
       headers: await _headers(withAuth: false),
@@ -69,11 +69,14 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> registro(Map<String, dynamic> userData) async {
-    return await post('/api/registro/', userData) as Map<String, dynamic>;
+    return await post('/api/usuarios/registro/', userData)
+        as Map<String, dynamic>;
   }
 
   Future<void> registrarDispositivo(String fcmToken) async {
-    await post('/api/dispositivos/registrar/', {'fcm_token': fcmToken});
+    await post('/api/usuarios/dispositivos/registrar/', {
+      'fcm_token': fcmToken,
+    });
   }
 
   // ============== USUARIO Y PERFIL ==============

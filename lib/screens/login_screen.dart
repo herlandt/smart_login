@@ -1,9 +1,9 @@
-﻿import 'dart:convert';
+﻿
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
-
+import 'dart:convert';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -12,13 +12,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  // La URL base ahora apunta a la raíz de la API, como debe ser.
   static const String baseUrl =
       'https://smart-condominium-backend-cg7l.onrender.com/api';
 
   final _userCtrl = TextEditingController(text: 'admin');
   final _passCtrl = TextEditingController(text: 'admin123');
   bool _loading = false;
-  String _selectedRole = 'admin'; // Default admin user
+  String _selectedRole = 'admin';
 
   final Map<String, Map<String, String>> _testUsers = {
     'admin': {'username': 'admin', 'password': 'admin123'},
@@ -29,32 +30,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     FocusScope.of(context).unfocus();
+    if (_userCtrl.text.isEmpty || _passCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, ingrese usuario y contraseña.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
 
     try {
-      // Verificar primero si es un usuario de prueba
-      final testUser = _testUsers[_selectedRole];
-      if (testUser != null &&
-          _userCtrl.text == testUser['username'] &&
-          _passCtrl.text == testUser['password']) {
-        // Simular token y guardar datos del usuario de prueba
-        const token = 'test_token_123';
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', token);
-        await prefs.setString('user_role', _selectedRole);
-        await prefs.setString('username', _userCtrl.text);
-
-        if (mounted) {
-          // Navegar según el rol
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const MainMenuScreen()),
-            (route) => false,
-          );
-        }
-        return;
-      }
-
-      // Si no es usuario de prueba, intentar login real
+      // Lógica de login unificada: SIEMPRE va contra el backend.
       final uri = Uri.parse('$baseUrl/login/');
       final res = await http.post(
         uri,
@@ -69,16 +58,17 @@ class _LoginScreenState extends State<LoginScreen> {
         final data =
             jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
         final token = (data['token'] as String?)?.trim();
-        final userRole = data['user']?['role'] ?? 'residente1';
+        
+        // El backend no devuelve el rol en el login, no es necesario guardarlo aquí.
+        // final userRole = data['user']?['role'] ?? 'residente1';
 
         if (token != null && token.isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('token', token);
-          await prefs.setString('user_role', userRole);
-          await prefs.setString('username', _userCtrl.text);
+          // Opcional: guardar el username para mostrarlo en el perfil.
+          await prefs.setString('username', _userCtrl.text.trim());
 
           if (!mounted) return;
-          // Navegar al menú principal para todos los usuarios
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => const MainMenuScreen()),
             (route) => false,
@@ -87,6 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
 
+      // Si el status code no es 200 o no hay token, muestra error.
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -98,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error de red: $e')));
+      ).showSnackBar(SnackBar(content: Text('Error de conexión: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -134,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Usuarios de Prueba',
+                      'Autocompletar con Usuarios de Prueba', // Texto cambiado para mayor claridad
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -144,20 +135,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       items: [
                         const DropdownMenuItem(
                           value: 'admin',
-                          child: Text('👨‍💼 Administrador (admin/admin123)'),
+                          child: Text('👨‍💼 Administrador'),
                         ),
                         const DropdownMenuItem(
                           value: 'residente1',
-                          child: Text('🏠 Residente (residente1/password123)'),
+                          child: Text('🏠 Residente'),
                         ),
                         const DropdownMenuItem(
                           value: 'seguridad1',
-                          child: Text('🔒 Seguridad (seguridad1/password123)'),
+                          child: Text('🔒 Seguridad'),
                         ),
                         const DropdownMenuItem(
                           value: 'mantenimiento1',
                           child: Text(
-                            '🔧 Mantenimiento (mantenimiento1/password123)',
+                            '🔧 Mantenimiento',
                           ),
                         ),
                       ],
