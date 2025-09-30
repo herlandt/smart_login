@@ -38,9 +38,9 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
 
       if (mounted) {
         setState(() {
-          gastos = futures[0] as List<dynamic>;
-          pagos = futures[1] as List<dynamic>;
-          multas = futures[2] as List<dynamic>;
+          gastos = futures[0];
+          pagos = futures[1];
+          multas = futures[2];
         });
       }
     } catch (e) {

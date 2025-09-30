@@ -28,7 +28,7 @@ class _MantenimientoScreenState extends State<MantenimientoScreen> {
     try {
       final api = ApiService();
       final [perfilRes, solicitudesRes] = await Future.wait([
-        api.fetchPerfil(),
+        api.getPerfilUsuario(),
         api.fetchSolicitudesMantenimiento(),
       ]);
       setState(() {
@@ -118,11 +118,11 @@ class _MantenimientoScreenState extends State<MantenimientoScreen> {
         }
       }
 
-      await ApiService().crearSolicitudMantenimiento(
-        titulo: titulo,
-        descripcion: descripcion,
-        propiedadId: propiedadId,
-      );
+      await ApiService().crearSolicitudMantenimiento({
+        'titulo': titulo,
+        'descripcion': descripcion,
+        'propiedad_id': propiedadId,
+      });
       await cargarSolicitudes();
 
       if (mounted) {

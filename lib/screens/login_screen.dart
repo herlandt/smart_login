@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../main.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,11 +46,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (mounted) {
           // Navegar según el rol
-          if (_selectedRole == 'admin') {
-            Navigator.pushReplacementNamed(context, '/main');
-          } else {
-            Navigator.pushReplacementNamed(context, '/avisos');
-          }
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const MainMenuScreen()),
+            (route) => false,
+          );
         }
         return;
       }
@@ -78,12 +78,11 @@ class _LoginScreenState extends State<LoginScreen> {
           await prefs.setString('username', _userCtrl.text);
 
           if (!mounted) return;
-          // Navegar según el rol del usuario real
-          if (userRole == 'admin') {
-            Navigator.pushReplacementNamed(context, '/main');
-          } else {
-            Navigator.pushReplacementNamed(context, '/avisos');
-          }
+          // Navegar al menú principal para todos los usuarios
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const MainMenuScreen()),
+            (route) => false,
+          );
           return;
         }
       }
@@ -119,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
         title: const Text('Iniciar sesión'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

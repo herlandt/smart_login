@@ -1,6 +1,6 @@
 ﻿import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../api/api_service.dart';
+import '../services/api_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final ApiService _api;
@@ -17,10 +17,21 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<bool> login(String user, String pass) async {
-    final ok = await _api.login(user.trim(), pass);
-    _isAuth = ok;
-    notifyListeners();
-    return ok;
+    try {
+      final result = await _api.login(user.trim(), pass);
+      if (result['token'] != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', result['token']);
+        _isAuth = true;
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _isAuth = false;
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> logout() async {

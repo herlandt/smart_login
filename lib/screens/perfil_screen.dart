@@ -25,7 +25,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
       error = null;
     });
     try {
-      final res = await ApiService().fetchPerfil();
+      final res = await ApiService().getPerfilUsuario();
       setState(() {
         perfil = res;
       });

@@ -139,7 +139,8 @@ class _CondominioScreenState extends State<CondominioScreen> {
                   buildList(
                     'Áreas Comunes',
                     areasComunes,
-                    (item) => 'Tipo: ${item['tipo'] ?? ''} - ${item['disponible'] == true ? 'Disponible' : 'No disponible'}',
+                    (item) =>
+                        'Tipo: ${item['tipo'] ?? ''} - ${item['disponible'] == true ? 'Disponible' : 'No disponible'}',
                   ),
                   buildReservasList(),
                   buildList(
@@ -160,7 +161,7 @@ class _CondominioScreenState extends State<CondominioScreen> {
 
   Widget buildReservasList() {
     if (reservas == null) return const SizedBox.shrink();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -195,14 +196,14 @@ class _CondominioScreenState extends State<CondominioScreen> {
                   Icons.event,
                   color: _getEstadoColor(reserva['estado']),
                 ),
-                title: Text(
-                  reserva['area_comun']?['nombre'] ?? 'Área común',
-                ),
+                title: Text(reserva['area_comun']?['nombre'] ?? 'Área común'),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Fecha: ${reserva['fecha'] ?? ''}'),
-                    Text('Hora: ${reserva['hora_inicio'] ?? ''} - ${reserva['hora_fin'] ?? ''}'),
+                    Text(
+                      'Hora: ${reserva['hora_inicio'] ?? ''} - ${reserva['hora_fin'] ?? ''}',
+                    ),
                     Text('Estado: ${reserva['estado'] ?? 'Pendiente'}'),
                   ],
                 ),
@@ -237,7 +238,10 @@ class _CondominioScreenState extends State<CondominioScreen> {
       builder: (BuildContext context) {
         DateTime fechaSeleccionada = DateTime.now();
         TimeOfDay horaInicio = TimeOfDay.now();
-        TimeOfDay horaFin = TimeOfDay(hour: TimeOfDay.now().hour + 1, minute: TimeOfDay.now().minute);
+        TimeOfDay horaFin = TimeOfDay(
+          hour: TimeOfDay.now().hour + 1,
+          minute: TimeOfDay.now().minute,
+        );
         dynamic areaSeleccionada;
 
         return StatefulBuilder(
@@ -253,13 +257,16 @@ class _CondominioScreenState extends State<CondominioScreen> {
                         labelText: 'Área Común',
                         border: OutlineInputBorder(),
                       ),
-                      value: areaSeleccionada,
-                      items: areasComunes?.where((area) => area['disponible'] == true).map((area) {
-                        return DropdownMenuItem(
-                          value: area,
-                          child: Text(area['nombre'] ?? 'Sin nombre'),
-                        );
-                      }).toList(),
+                      initialValue: areaSeleccionada,
+                      items: areasComunes
+                          ?.where((area) => area['disponible'] == true)
+                          .map((area) {
+                            return DropdownMenuItem(
+                              value: area,
+                              child: Text(area['nombre'] ?? 'Sin nombre'),
+                            );
+                          })
+                          .toList(),
                       onChanged: (value) {
                         setState(() {
                           areaSeleccionada = value;
@@ -269,14 +276,18 @@ class _CondominioScreenState extends State<CondominioScreen> {
                     const SizedBox(height: 16),
                     ListTile(
                       title: const Text('Fecha'),
-                      subtitle: Text('${fechaSeleccionada.day}/${fechaSeleccionada.month}/${fechaSeleccionada.year}'),
+                      subtitle: Text(
+                        '${fechaSeleccionada.day}/${fechaSeleccionada.month}/${fechaSeleccionada.year}',
+                      ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final fecha = await showDatePicker(
                           context: context,
                           initialDate: fechaSeleccionada,
                           firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 30)),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 30),
+                          ),
                         );
                         if (fecha != null) {
                           setState(() {
@@ -287,7 +298,9 @@ class _CondominioScreenState extends State<CondominioScreen> {
                     ),
                     ListTile(
                       title: const Text('Hora de inicio'),
-                      subtitle: Text('${horaInicio.hour}:${horaInicio.minute.toString().padLeft(2, '0')}'),
+                      subtitle: Text(
+                        '${horaInicio.hour}:${horaInicio.minute.toString().padLeft(2, '0')}',
+                      ),
                       trailing: const Icon(Icons.access_time),
                       onTap: () async {
                         final hora = await showTimePicker(
@@ -303,7 +316,9 @@ class _CondominioScreenState extends State<CondominioScreen> {
                     ),
                     ListTile(
                       title: const Text('Hora de fin'),
-                      subtitle: Text('${horaFin.hour}:${horaFin.minute.toString().padLeft(2, '0')}'),
+                      subtitle: Text(
+                        '${horaFin.hour}:${horaFin.minute.toString().padLeft(2, '0')}',
+                      ),
                       trailing: const Icon(Icons.access_time),
                       onTap: () async {
                         final hora = await showTimePicker(
@@ -347,14 +362,22 @@ class _CondominioScreenState extends State<CondominioScreen> {
     );
   }
 
-  Future<void> _crearReserva(int areaId, DateTime fecha, TimeOfDay horaInicio, TimeOfDay horaFin) async {
+  Future<void> _crearReserva(
+    int areaId,
+    DateTime fecha,
+    TimeOfDay horaInicio,
+    TimeOfDay horaFin,
+  ) async {
     try {
       final api = ApiService();
       await api.post('api/finanzas/reservas/', {
         'area_comun_id': areaId,
-        'fecha': '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}',
-        'hora_inicio': '${horaInicio.hour.toString().padLeft(2, '0')}:${horaInicio.minute.toString().padLeft(2, '0')}',
-        'hora_fin': '${horaFin.hour.toString().padLeft(2, '0')}:${horaFin.minute.toString().padLeft(2, '0')}',
+        'fecha':
+            '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}',
+        'hora_inicio':
+            '${horaInicio.hour.toString().padLeft(2, '0')}:${horaInicio.minute.toString().padLeft(2, '0')}',
+        'hora_fin':
+            '${horaFin.hour.toString().padLeft(2, '0')}:${horaFin.minute.toString().padLeft(2, '0')}',
       });
 
       if (mounted) {

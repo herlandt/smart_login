@@ -63,7 +63,12 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         });
       }
     } catch (e) {
-      print('Error configurando notificaciones: $e');
+      // Error configurando notificaciones
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error configurando notificaciones: $e')),
+        );
+      }
     }
   }
 
