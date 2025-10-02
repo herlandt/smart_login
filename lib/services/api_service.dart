@@ -1,21 +1,27 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 
 class ApiService {
-  static const String baseUrl =
-      'https://smart-condominium-backend-cg7l.onrender.com';
-
-  ApiService();
+  // Usar URL base sin agregar /api para evitar duplicación
+  String get baseUrl => ApiConfig.baseUrl;
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
 
+  Future<void> _saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', token);
+  }
+
   Future<Map<String, String>> _headers({bool withAuth = true}) async {
     final headers = <String, String>{
       'Content-Type': 'application/json; charset=UTF-8',
+      'Accept': 'application/json',
+      'User-Agent': 'SmartLogin-Android-Emulator/1.0',
     };
     if (withAuth) {
       final token = await _getToken();
@@ -27,208 +33,223 @@ class ApiService {
   }
 
   // ============== MÉTODOS GENÉRICOS ==============
-  Future<dynamic> get(String endpoint) async {
-    final uri = Uri.parse('$baseUrl$endpoint');
-    final res = await http.get(uri, headers: await _headers());
-    if (res.statusCode == 200) {
-      return jsonDecode(utf8.decode(res.bodyBytes));
+  Future<dynamic> get(
+    String endpoint, {
+    Map<String, dynamic>? queryParams,
+  }) async {
+    String query = '';
+    if (queryParams != null) {
+      query = queryParams.entries
+          .where((e) => e.value != null && e.value.toString().isNotEmpty)
+          .map(
+            (e) =>
+                '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value.toString())}',
+          )
+          .join('&');
+      query = query.isNotEmpty ? '?$query' : '';
     }
-    throw Exception('GET $endpoint → ${res.statusCode}: ${res.body}');
+
+    final response = await http
+        .get(Uri.parse('$baseUrl$endpoint$query'), headers: await _headers())
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Error ${response.statusCode}: ${response.body}');
+    }
   }
 
   Future<dynamic> post(String endpoint, Map<String, dynamic> data) async {
-    final uri = Uri.parse('$baseUrl$endpoint');
-    final res = await http.post(
-      uri,
-      headers: await _headers(),
-      body: jsonEncode(data),
-    );
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      return jsonDecode(utf8.decode(res.bodyBytes));
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl$endpoint'),
+          headers: await _headers(),
+          body: jsonEncode(data),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Error ${response.statusCode}: ${response.body}');
     }
-    throw Exception('POST $endpoint → ${res.statusCode}: ${res.body}');
   }
 
   // ============== AUTENTICACIÓN ==============
   Future<Map<String, dynamic>> login(String username, String password) async {
-    final uri = Uri.parse('$baseUrl/api/usuarios/login/');
-    final res = await http.post(
-      uri,
-      headers: await _headers(withAuth: false),
-      body: jsonEncode({'username': username, 'password': password}),
-    );
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['token'] != null) {
-        return data;
-      } else {
-        throw Exception('Login exitoso pero sin token');
-      }
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/login/'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'username': username, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      await _saveToken(data['token']);
+      return data;
+    } else {
+      throw Exception('Error de login: ${response.body}');
     }
-    throw Exception('Credenciales incorrectas');
   }
 
-  Future<Map<String, dynamic>> registro(Map<String, dynamic> userData) async {
-    return await post('/api/usuarios/registro/', userData)
-        as Map<String, dynamic>;
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
   }
 
-  Future<void> registrarDispositivo(String fcmToken) async {
-    await post('/api/usuarios/dispositivos/registrar/', {
-      'fcm_token': fcmToken,
-    });
-  }
-
-  // ============== USUARIO Y PERFIL ==============
-  Future<Map<String, dynamic>> getPerfilUsuario() async {
-    return await get('/api/usuarios/perfil/') as Map<String, dynamic>;
+  Future<dynamic> getWelcomeInfo() async {
+    final response = await http.get(Uri.parse('$baseUrl/'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Error: ${response.statusCode}');
   }
 
   // ============== FINANZAS ==============
   Future<List<dynamic>> fetchGastos() async {
-    return await get('/api/finanzas/gastos/') as List<dynamic>;
+    return await get('/finanzas/gastos/') as List<dynamic>;
   }
 
   Future<List<dynamic>> fetchPagos() async {
-    return await get('/api/finanzas/pagos/') as List<dynamic>;
+    return await get('/finanzas/pagos/') as List<dynamic>;
   }
 
   Future<List<dynamic>> fetchMultas() async {
-    return await get('/api/finanzas/multas/') as List<dynamic>;
+    return await get('/finanzas/multas/') as List<dynamic>;
   }
 
-  Future<List<dynamic>> fetchEgresos() async {
-    return await get('/api/finanzas/egresos/') as List<dynamic>;
+  Future<void> pagarGasto(
+    int gastoId, {
+    double? montoPagado,
+    String? metodoPago,
+    String? referencia,
+  }) async {
+    final data = {
+      'monto_pagado': montoPagado,
+      'metodo_pago': metodoPago ?? 'transferencia',
+      'referencia': referencia,
+      'fecha_pago': DateTime.now().toIso8601String(),
+    };
+    await post('/finanzas/gastos/$gastoId/registrar_pago/', data);
   }
 
-  Future<List<dynamic>> fetchIngresos() async {
-    return await get('/api/finanzas/ingresos/') as List<dynamic>;
+  Future<void> pagarMulta(
+    int multaId, {
+    double? montoPagado,
+    String? metodoPago,
+    String? referencia,
+  }) async {
+    final data = {
+      'monto_pagado': montoPagado,
+      'metodo_pago': metodoPago ?? 'transferencia',
+      'referencia': referencia,
+      'fecha_pago': DateTime.now().toIso8601String(),
+    };
+    await post('/finanzas/multas/$multaId/registrar_pago/', data);
   }
 
-  Future<Map<String, dynamic>> pagarGasto(int gastoId) async {
-    return await post('/api/finanzas/gastos/$gastoId/pagar/', {
-          'metodo_pago': 'transferencia',
-        })
-        as Map<String, dynamic>;
+  // Pagos en lote
+  Future<dynamic> pagarGastosEnLote(
+    List<int> gastosIds, {
+    String? metodoPago,
+    String? referencia,
+  }) async {
+    final data = {
+      'gastos_ids': gastosIds,
+      'metodo_pago': metodoPago ?? 'transferencia',
+      'referencia': referencia,
+      'fecha_pago': DateTime.now().toIso8601String(),
+    };
+    return await post('/finanzas/gastos/pagar_en_lote/', data);
   }
 
-  Future<Map<String, dynamic>> pagarMulta(int multaId) async {
-    return await post('/api/finanzas/multas/$multaId/pagar/', {
-          'metodo_pago': 'transferencia',
-        })
-        as Map<String, dynamic>;
+  Future<dynamic> pagarMultasEnLote(
+    List<int> multasIds, {
+    String? metodoPago,
+    String? referencia,
+  }) async {
+    final data = {
+      'multas_ids': multasIds,
+      'metodo_pago': metodoPago ?? 'transferencia',
+      'referencia': referencia,
+      'fecha_pago': DateTime.now().toIso8601String(),
+    };
+    return await post('/finanzas/multas/pagar_en_lote/', data);
+  }
+
+  // Simular pago
+  Future<dynamic> simularPago(int pagoId) async {
+    return await post('/finanzas/pagos/$pagoId/simular/', {});
+  }
+
+  // Obtener comprobante de pago
+  Future<dynamic> obtenerComprobantePago(int pagoId) async {
+    return await get('/finanzas/pagos/$pagoId/comprobante/');
+  }
+
+  Future<dynamic> obtenerComprbanteMulta(int pagoMultaId) async {
+    return await get('/finanzas/pagos-multas/$pagoMultaId/comprobante/');
   }
 
   // ============== CONDOMINIO ==============
   Future<List<dynamic>> fetchPropiedades() async {
-    return await get('/api/condominio/propiedades/') as List<dynamic>;
+    return await get('/condominio/propiedades/') as List<dynamic>;
   }
 
   Future<List<dynamic>> fetchAreasComunes() async {
-    return await get('/api/condominio/areas-comunes/') as List<dynamic>;
-  }
-
-  Future<List<dynamic>> fetchAvisos() async {
-    return await get('/api/condominio/avisos/') as List<dynamic>;
+    return await get('/condominio/areas-comunes/') as List<dynamic>;
   }
 
   Future<List<dynamic>> fetchReglas() async {
-    return await get('/api/condominio/reglas/') as List<dynamic>;
+    return await get('/reglas/') as List<dynamic>;
   }
 
   Future<List<dynamic>> fetchReservas() async {
-    return await get('/api/condominio/reservas/') as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> crearReserva(
-    Map<String, dynamic> datosReserva,
-  ) async {
-    return await post('/api/condominio/reservas/', datosReserva)
-        as Map<String, dynamic>;
-  }
-
-  Future<void> cancelarReserva(int reservaId) async {
-    await post('/api/condominio/reservas/$reservaId/cancelar/', {});
+    return await get('/finanzas/reservas/') as List<dynamic>;
   }
 
   // ============== SEGURIDAD ==============
-  Future<List<dynamic>> fetchVehiculos() async {
-    return await get('/api/seguridad/vehiculos/') as List<dynamic>;
-  }
-
-  Future<List<dynamic>> fetchVisitantes() async {
-    return await get('/api/seguridad/visitantes/') as List<dynamic>;
-  }
-
   Future<List<dynamic>> fetchVisitas() async {
-    return await get('/api/seguridad/visitas/') as List<dynamic>;
+    return await get('/seguridad/visitas/') as List<dynamic>;
+  }
+
+  Future<List<dynamic>> fetchVehiculos() async {
+    return await get('/seguridad/vehiculos/') as List<dynamic>;
   }
 
   Future<List<dynamic>> fetchEventosSeguridad() async {
-    return await get('/api/seguridad/eventos/') as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> controlAccesoVehicular(String placa) async {
-    return await post('/api/seguridad/control-acceso-vehicular/', {
-          'placa': placa,
-        })
-        as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> controlSalidaVehicular(String placa) async {
-    return await post('/api/seguridad/control-salida-vehicular/', {
-          'placa': placa,
-        })
-        as Map<String, dynamic>;
-  }
-
-  Future<List<dynamic>> getVisitasAbiertas() async {
-    return await get('/api/seguridad/visitas-abiertas/') as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> getDashboardResumen() async {
-    return await get('/api/seguridad/dashboard/resumen/')
-        as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> crearVisita(
-    Map<String, dynamic> datosVisita,
-  ) async {
-    return await post('/api/seguridad/visitas/', datosVisita)
-        as Map<String, dynamic>;
+    return await get('/seguridad/eventos/') as List<dynamic>;
   }
 
   // ============== MANTENIMIENTO ==============
   Future<List<dynamic>> fetchSolicitudesMantenimiento() async {
-    return await get('/api/mantenimiento/solicitudes/') as List<dynamic>;
+    return await get('/mantenimiento/solicitudes/') as List<dynamic>;
   }
 
-  Future<List<dynamic>> fetchPersonalMantenimiento() async {
-    return await get('/api/mantenimiento/personal/') as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> crearSolicitudMantenimiento(
-    Map<String, dynamic> datos,
+  Future<dynamic> crearSolicitudMantenimiento(
+    Map<String, dynamic> solicitud,
   ) async {
-    return await post('/api/mantenimiento/solicitudes/', datos)
-        as Map<String, dynamic>;
+    return await post('/mantenimiento/solicitudes/', solicitud);
   }
 
-  // ============== NOTIFICACIONES ==============
+  // ============== USUARIOS ==============
+  Future<dynamic> getPerfilUsuario() async {
+    return await get('/usuarios/perfil/');
+  }
+
+  // ============== COMUNICACIONES ==============
+  Future<List<dynamic>> fetchAvisos() async {
+    return await get('/comunicaciones/avisos/') as List<dynamic>;
+  }
+
   Future<List<dynamic>> fetchNotificaciones() async {
-    return await get('/api/notificaciones/') as List<dynamic>;
+    return await get('/comunicaciones/notificaciones/') as List<dynamic>;
   }
 
-  Future<void> marcarNotificacionLeida(int notificacionId) async {
-    await post('/api/notificaciones/$notificacionId/marcar-leida/', {});
-  }
-
-  // ============== AUDITORÍA ==============
-  Future<List<dynamic>> fetchHistorialAuditoria() async {
-    return await get('/api/auditoria/historial/') as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> getEstadisticasAuditoria() async {
-    return await get('/api/auditoria/estadisticas/') as Map<String, dynamic>;
-  }
+  // ============== MÉTODOS ADICIONALES PARA COMPATIBILIDAD ==============
+  Future<List<dynamic>> getGastos() async => fetchGastos();
+  Future<List<dynamic>> getReservas() async => fetchReservas();
 }

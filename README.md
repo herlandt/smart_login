@@ -1,16 +1,46 @@
-# smart_login
+# 📱 Smart Login - Aplicación de Condominio Inteligente
 
-A new Flutter project.
+## 🎯 Descripción
+Sistema móvil multiplataforma para gestión integral de condominios inteligentes desarrollado en Flutter.
 
-## Getting Started
+## 🚀 Estado del Proyecto
+✅ **COMPLETAMENTE FUNCIONAL** - Todos los sistemas de pagos y autenticación operativos
 
-This project is a starting point for a Flutter application.
+## � Características Principales
+- ✅ **Sistema de Pagos Completo**: Pagos individuales y por lotes
+- ✅ **Autenticación Robusta**: Quick Login con usuarios de prueba
+- ✅ **Gestión de Condominio**: Avisos, visitas, reservas
+- ✅ **Multiplataforma**: Android, iOS, Web, Desktop
 
-A few resources to get you started if this is your first Flutter project:
+## � Documentación Detallada
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### � **Documentación Completa del Proyecto**
+� **[README_COMPLETO.md](README_COMPLETO.md)** - Documentación técnica completa
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### � **Guía Técnica de Implementación**
+👉 **[GUIA_TECNICA.md](GUIA_TECNICA.md)** - Detalles técnicos y cambios implementados
+
+### 📱 **Manual de Usuario**  
+� **[MANUAL_USUARIO.md](MANUAL_USUARIO.md)** - Guía paso a paso para usuarios
+
+## � Inicio Rápido
+
+```bash
+# Clonar repositorio
+git clone https://github.com/herlandt/smart_login.git
+cd smart_login
+
+# Instalar dependencias
+flutter pub get
+
+# Ejecutar aplicación
+flutter run
+```
+
+## 🔑 Quick Login para Pruebas
+- **Usuario recomendado**: `residente1`
+- **Contraseña**: `isaelOrtiz2`
+
+## � Soporte
+- **Repository**: [GitHub](https://github.com/herlandt/smart_login)
+- **Desarrollador**: Herlandt

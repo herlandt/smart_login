@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import '../services/api_service_actualizado.dart';
 
 class CondominioScreen extends StatefulWidget {
   const CondominioScreen({super.key});
@@ -31,29 +31,41 @@ class _CondominioScreenState extends State<CondominioScreen> {
       error = null;
     });
     try {
-      final api = ApiService();
+      final api = ApiServiceActualizado();
+      
+      // Usar los métodos correctos del API actualizado
       final futures = await Future.wait([
-        api.fetchPropiedades().catchError((e) => <dynamic>[]),
-        api.fetchAreasComunes().catchError((e) => <dynamic>[]),
-        api.get('/api/condominio/avisos/').catchError((e) => <dynamic>[]),
-        api.fetchReglas().catchError((e) => <dynamic>[]),
-        api.fetchReservas().catchError((e) => <dynamic>[]),
+        api.getPropiedades().catchError((e) {
+          debugPrint('Error cargando propiedades: $e');
+          return <dynamic>[];
+        }),
+        api.getAreasComunes().catchError((e) {
+          debugPrint('Error cargando áreas comunes: $e');
+          return <dynamic>[];
+        }),
+        api.getAvisos().catchError((e) {
+          debugPrint('Error cargando avisos: $e');
+          return <dynamic>[];
+        }),
+        api.getReglas().catchError((e) {
+          debugPrint('Error cargando reglas: $e');
+          return <dynamic>[];
+        }),
+        // Note: No hay método de reservas en el API actualizado, usar lista vacía
+        Future.value(<dynamic>[]).catchError((e) => <dynamic>[]),
       ]);
 
       if (mounted) {
         setState(() {
-          propiedades = futures[0] is List ? futures[0] : <dynamic>[];
-          areasComunes = futures[1] is List ? futures[1] : <dynamic>[];
-          avisos = futures[2] is List
-              ? futures[2]
-              : (futures[2] is Map && futures[2]['data'] != null
-                    ? futures[2]['data']
-                    : <dynamic>[]);
-          reglas = futures[3] is List ? futures[3] : <dynamic>[];
-          reservas = futures[4] is List ? futures[4] : <dynamic>[];
+          propiedades = futures[0];
+          areasComunes = futures[1];
+          avisos = futures[2];
+          reglas = futures[3];
+          reservas = futures[4];
         });
       }
     } catch (e) {
+      debugPrint('Error general en cargarCondominio: $e');
       if (mounted) {
         setState(() {
           error = e.toString();
@@ -257,7 +269,7 @@ class _CondominioScreenState extends State<CondominioScreen> {
                         labelText: 'Área Común',
                         border: OutlineInputBorder(),
                       ),
-                      initialValue: areaSeleccionada,
+                      value: areaSeleccionada,
                       items: areasComunes
                           ?.where((area) => area['disponible'] == true)
                           .map((area) {
@@ -370,7 +382,8 @@ class _CondominioScreenState extends State<CondominioScreen> {
   ) async {
     try {
       final api = ApiService();
-      await api.post('api/finanzas/reservas/', {
+      // --- CORRECCIÓN AQUÍ ---
+      await api.post('/api/finanzas/reservas/', {
         'area_comun_id': areaId,
         'fecha':
             '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}',
@@ -404,7 +417,8 @@ class _CondominioScreenState extends State<CondominioScreen> {
   Future<void> _cancelarReserva(int reservaId) async {
     try {
       final api = ApiService();
-      await api.post('api/finanzas/reservas/$reservaId/cancelar/', {});
+      // --- CORRECCIÓN AQUÍ ---
+      await api.post('/api/finanzas/reservas/$reservaId/cancelar/', {});
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -15,9 +15,7 @@ class SmartLoginApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthProviderActualizado()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => AuthProviderSimple())],
       child: MaterialApp(
         title: 'Smart Login - Condominio',
         debugShowCheckedModeBanner: false,
@@ -79,13 +77,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
     super.initState();
     // Verificar estado de autenticación al iniciar
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AuthProviderActualizado>().checkAuthStatus();
+      context.read<AuthProviderSimple>().checkAuthStatus();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProviderActualizado>(
+    return Consumer<AuthProviderSimple>(
       builder: (context, authProvider, child) {
         // Mostrar pantalla de carga mientras se verifica el estado
         if (authProvider.isLoading) {

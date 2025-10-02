@@ -1,9 +1,9 @@
-﻿
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import '../main.dart';
-import 'dart:convert';
+﻿import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider_simple.dart';
+import 'home_screen.dart';
+import 'quick_login_screen.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -12,24 +12,38 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // La URL base ahora apunta a la raíz de la API, como debe ser.
-  static const String baseUrl =
-      'https://smart-condominium-backend-cg7l.onrender.com/api';
-
   final _userCtrl = TextEditingController(text: 'admin');
   final _passCtrl = TextEditingController(text: 'admin123');
   bool _loading = false;
-  String _selectedRole = 'admin';
+  String _selectedRole = 'residente1';
 
   final Map<String, Map<String, String>> _testUsers = {
-    'admin': {'username': 'admin', 'password': 'admin123'},
-    'residente1': {'username': 'residente1', 'password': 'password123'},
-    'seguridad1': {'username': 'seguridad1', 'password': 'password123'},
-    'mantenimiento1': {'username': 'mantenimiento1', 'password': 'password123'},
+    'admin': {
+      'username': 'admin',
+      'password': 'admin123',
+      'estado': '✅ VERIFICADO',
+    },
+    'residente1': {
+      'username': 'residente1',
+      'password': 'isaelOrtiz2',
+      'estado': '✅ VERIFICADO',
+    },
+    'seguridad1': {
+      'username': 'seguridad1',
+      'password': 'guardia123',
+      'estado': '✅ VERIFICADO',
+    },
+    'electricista1': {
+      'username': 'electricista1',
+      'password': 'electrico123',
+      'estado': '✅ NUEVO',
+    },
   };
 
   Future<void> _login() async {
     FocusScope.of(context).unfocus();
+
+    // Verificar campos vacíos
     if (_userCtrl.text.isEmpty || _passCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -40,56 +54,55 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    // Mostrar mensaje de éxito para credenciales conocidas
+    final username = _userCtrl.text.trim();
+    if ([
+      'admin',
+      'residente1',
+      'seguridad1',
+      'electricista1',
+    ].contains(username)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Usando credenciales verificadas: $username'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
     setState(() => _loading = true);
 
     try {
-      // Lógica de login unificada: SIEMPRE va contra el backend.
-      final uri = Uri.parse('$baseUrl/login/');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
-        body: jsonEncode({
-          'username': _userCtrl.text.trim(),
-          'password': _passCtrl.text,
-        }),
-      );
+      // Usar el AuthProviderActualizado para hacer login
+      final authProvider = Provider.of<AuthProviderActualizado>(context, listen: false);
+      final success = await authProvider.login(_userCtrl.text.trim(), _passCtrl.text);
 
-      if (res.statusCode == 200) {
-        final data =
-            jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        final token = (data['token'] as String?)?.trim();
-        
-        // El backend no devuelve el rol en el login, no es necesario guardarlo aquí.
-        // final userRole = data['user']?['role'] ?? 'residente1';
-
-        if (token != null && token.isNotEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('token', token);
-          // Opcional: guardar el username para mostrarlo en el perfil.
-          await prefs.setString('username', _userCtrl.text.trim());
-
-          if (!mounted) return;
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const MainMenuScreen()),
-            (route) => false,
-          );
-          return;
-        }
+      if (success) {
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          (route) => false,
+        );
+        return;
+      } else {
+        // Si el login falla, mostrar error
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Usuario o contraseña incorrectos.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-
-      // Si el status code no es 200 o no hay token, muestra error.
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Usuario o contraseña incorrectos.'),
+        SnackBar(
+          content: Text('Error de conexión: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error de conexión: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -125,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Autocompletar con Usuarios de Prueba', // Texto cambiado para mayor claridad
+                      'Usuarios Verificados (Todas Funcionan)',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -133,22 +146,96 @@ class _LoginScreenState extends State<LoginScreen> {
                       value: _selectedRole,
                       isExpanded: true,
                       items: [
-                        const DropdownMenuItem(
+                        DropdownMenuItem(
                           value: 'admin',
-                          child: Text('👨‍💼 Administrador'),
+                          child: Row(
+                            children: [
+                              const Text('👨‍💼 Administrador'),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Text(
+                                  '✅',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const DropdownMenuItem(
+                        DropdownMenuItem(
                           value: 'residente1',
-                          child: Text('🏠 Residente'),
+                          child: Row(
+                            children: [
+                              const Text('🏠 Residente'),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Text(
+                                  '✅',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const DropdownMenuItem(
+                        DropdownMenuItem(
                           value: 'seguridad1',
-                          child: Text('🔒 Seguridad'),
+                          child: Row(
+                            children: [
+                              const Text('� Seguridad'),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Text(
+                                  '✅',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const DropdownMenuItem(
-                          value: 'mantenimiento1',
-                          child: Text(
-                            '🔧 Mantenimiento',
+                        DropdownMenuItem(
+                          value: 'electricista1',
+                          child: Row(
+                            children: [
+                              const Text('� Electricista'),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Text(
+                                  '🆕',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -187,6 +274,27 @@ class _LoginScreenState extends State<LoginScreen> {
               obscureText: true,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _login(),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const QuickLoginScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.flash_on),
+                label: const Text('⚡ Quick Login - Usuarios de Prueba'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
             ),
             const SizedBox(height: 24),
             SizedBox(

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/payment_service.dart';
+import 'pasarela_pago_screen.dart';
+import 'historial_pagos_screen.dart';
+import 'pago_qr_screen.dart';
 
 class FinanzasScreen extends StatefulWidget {
   const FinanzasScreen({super.key});
@@ -14,6 +18,11 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
   List<dynamic>? multas;
   bool loading = true;
   String? error;
+
+  // Para selección múltiple
+  Set<int> gastosSeleccionados = {};
+  Set<int> multasSeleccionadas = {};
+  bool modoSeleccion = false;
 
   @override
   void initState() {
@@ -64,7 +73,44 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Finanzas'),
+          title: Text(
+            modoSeleccion
+                ? '${gastosSeleccionados.length + multasSeleccionadas.length} seleccionados'
+                : 'Finanzas',
+          ),
+          actions: [
+            if (modoSeleccion)
+              IconButton(
+                icon: const Icon(Icons.payment),
+                onPressed: _pagarSeleccionados,
+                tooltip: 'Pagar Seleccionados',
+              ),
+            if (modoSeleccion)
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  setState(() {
+                    modoSeleccion = false;
+                    gastosSeleccionados.clear();
+                    multasSeleccionadas.clear();
+                  });
+                },
+                tooltip: 'Cancelar Selección',
+              ),
+            if (!modoSeleccion)
+              IconButton(
+                icon: const Icon(Icons.history),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const HistorialPagosScreen(),
+                    ),
+                  );
+                },
+                tooltip: 'Historial de Pagos',
+              ),
+          ],
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Gastos', icon: Icon(Icons.receipt)),
@@ -95,8 +141,236 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                   _buildMultasTab(),
                 ],
               ),
+        floatingActionButton: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!modoSeleccion)
+              FloatingActionButton.small(
+                onPressed: () {
+                  setState(() {
+                    modoSeleccion = true;
+                  });
+                },
+                heroTag: "multi_select",
+                child: const Icon(Icons.checklist),
+                tooltip: 'Selección Múltiple',
+              ),
+            const SizedBox(height: 8),
+            FloatingActionButton.extended(
+              onPressed: _mostrarPagoRapido,
+              icon: const Icon(Icons.qr_code),
+              label: const Text('Pago QR'),
+              heroTag: "qr_payment",
+              backgroundColor: Theme.of(context).primaryColor,
+              foregroundColor: Colors.white,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _mostrarPagoRapido() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.4,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Text(
+                'Pago Rápido con QR',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                decoration: const InputDecoration(
+                  labelText: 'Monto (Bs.)',
+                  prefixIcon: Icon(Icons.attach_money),
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                onFieldSubmitted: (value) {
+                  final monto = double.tryParse(value);
+                  if (monto != null && monto > 0) {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PagoQRScreen(
+                          monto: monto,
+                          concepto: 'Pago rápido',
+                          onPagoCompletado: (transaccion) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Pago procesado exitosamente'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            cargarFinanzas();
+                          },
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // Implementar lógica para monto rápido
+                },
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Generar QR'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pagarSeleccionados() async {
+    if (gastosSeleccionados.isEmpty && multasSeleccionadas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay elementos seleccionados'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Calcular monto total
+    double montoTotal = 0.0;
+
+    // Sumar gastos seleccionados
+    if (gastosSeleccionados.isNotEmpty && gastos != null) {
+      for (final gasto in gastos!) {
+        if (gastosSeleccionados.contains(gasto['id']) &&
+            gasto['pagado'] != true) {
+          montoTotal += double.tryParse(gasto['monto'].toString()) ?? 0.0;
+        }
+      }
+    }
+
+    // Sumar multas seleccionadas
+    if (multasSeleccionadas.isNotEmpty && multas != null) {
+      for (final multa in multas!) {
+        if (multasSeleccionadas.contains(multa['id']) &&
+            multa['pagado'] != true) {
+          montoTotal += double.tryParse(multa['monto'].toString()) ?? 0.0;
+        }
+      }
+    }
+
+    if (montoTotal <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay deudas pendientes en la selección'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Mostrar confirmación
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar Pago en Lote'),
+        content: Text(
+          'Se pagarán ${gastosSeleccionados.length} gastos y ${multasSeleccionadas.length} multas.\n\n'
+          'Monto total: Bs. ${montoTotal.toStringAsFixed(2)}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pagar Todo'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado == true) {
+      // Navegar a la pasarela de pago
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PasarelaPagoScreen(
+            monto: montoTotal,
+            concepto:
+                'Pago en lote (${gastosSeleccionados.length + multasSeleccionadas.length} elementos)',
+            descripcion: 'Pago múltiple de gastos y multas',
+            onPagoCompletado: (transaccion) async {
+              if (transaccion.estado == EstadoPago.exitoso) {
+                try {
+                  final api = ApiService();
+
+                  // Pagar gastos en lote
+                  if (gastosSeleccionados.isNotEmpty) {
+                    await api.pagarGastosEnLote(
+                      gastosSeleccionados.toList(),
+                      metodoPago: transaccion.metodo.codigo,
+                      referencia: transaccion.referencia,
+                    );
+                  }
+
+                  // Pagar multas en lote
+                  if (multasSeleccionadas.isNotEmpty) {
+                    await api.pagarMultasEnLote(
+                      multasSeleccionadas.toList(),
+                      metodoPago: transaccion.metodo.codigo,
+                      referencia: transaccion.referencia,
+                    );
+                  }
+
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Pago en lote procesado exitosamente'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+
+                    // Salir del modo selección y recargar datos
+                    setState(() {
+                      modoSeleccion = false;
+                      gastosSeleccionados.clear();
+                      multasSeleccionadas.clear();
+                    });
+
+                    await cargarFinanzas();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error en pago en lote: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildGastosTab() {
@@ -112,12 +386,27 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                 final monto = gasto['monto']?.toString() ?? '0';
                 final descripcion = gasto['descripcion'] ?? 'Sin descripción';
                 final fecha = gasto['fecha_emision'] ?? '';
-                final estado = gasto['estado'] ?? 'Pendiente';
+                final estado = gasto['pagado'] == true ? 'Pagado' : 'Pendiente';
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: ListTile(
-                    leading: const Icon(Icons.receipt, color: Colors.orange),
+                    leading: modoSeleccion
+                        ? Checkbox(
+                            value: gastosSeleccionados.contains(gasto['id']),
+                            onChanged: gasto['pagado'] == true
+                                ? null
+                                : (selected) {
+                                    setState(() {
+                                      if (selected == true) {
+                                        gastosSeleccionados.add(gasto['id']);
+                                      } else {
+                                        gastosSeleccionados.remove(gasto['id']);
+                                      }
+                                    });
+                                  },
+                          )
+                        : const Icon(Icons.receipt, color: Colors.orange),
                     title: Text(
                       'Bs. $monto',
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -132,10 +421,20 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                     ),
                     trailing: gasto['pagado'] == true
                         ? const Icon(Icons.check_circle, color: Colors.green)
+                        : modoSeleccion
+                        ? null
                         : ElevatedButton(
                             onPressed: () => procesarPago(gasto),
                             child: const Text('Pagar'),
                           ),
+                    onLongPress: !modoSeleccion && gasto['pagado'] != true
+                        ? () {
+                            setState(() {
+                              modoSeleccion = true;
+                              gastosSeleccionados.add(gasto['id']);
+                            });
+                          }
+                        : null,
                   ),
                 );
               },
@@ -153,10 +452,9 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
               itemCount: pagos!.length,
               itemBuilder: (ctx, i) {
                 final pago = pagos![i];
-                final monto = pago['monto']?.toString() ?? '0';
+                final monto = pago['monto_pagado']?.toString() ?? '0';
                 final fecha = pago['fecha_pago'] ?? '';
-                final metodo = pago['metodo_pago'] ?? 'No especificado';
-                final estado = pago['estado'] ?? 'Procesado';
+                final estado = pago['estado_pago'] ?? 'Procesado';
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
@@ -170,7 +468,6 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Fecha: $fecha'),
-                        Text('Método: $metodo'),
                         Text('Estado: $estado'),
                       ],
                     ),
@@ -196,14 +493,29 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
               itemBuilder: (ctx, i) {
                 final multa = multas![i];
                 final monto = multa['monto']?.toString() ?? '0';
-                final motivo = multa['motivo'] ?? 'No especificado';
-                final fecha = multa['fecha_multa'] ?? '';
-                final estado = multa['estado'] ?? 'Pendiente';
+                final motivo = multa['concepto'] ?? 'No especificado';
+                final fecha = multa['fecha_emision'] ?? '';
+                final estado = multa['pagado'] == true ? 'Pagada' : 'Pendiente';
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: ListTile(
-                    leading: const Icon(Icons.warning, color: Colors.red),
+                    leading: modoSeleccion
+                        ? Checkbox(
+                            value: multasSeleccionadas.contains(multa['id']),
+                            onChanged: multa['pagado'] == true
+                                ? null
+                                : (selected) {
+                                    setState(() {
+                                      if (selected == true) {
+                                        multasSeleccionadas.add(multa['id']);
+                                      } else {
+                                        multasSeleccionadas.remove(multa['id']);
+                                      }
+                                    });
+                                  },
+                          )
+                        : const Icon(Icons.warning, color: Colors.red),
                     title: Text(
                       'Bs. $monto',
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -216,12 +528,22 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                         Text('Estado: $estado'),
                       ],
                     ),
-                    trailing: multa['pagada'] == true
+                    trailing: multa['pagado'] == true
                         ? const Icon(Icons.check_circle, color: Colors.green)
+                        : modoSeleccion
+                        ? null
                         : ElevatedButton(
                             onPressed: () => pagarMulta(multa),
                             child: const Text('Pagar'),
                           ),
+                    onLongPress: !modoSeleccion && multa['pagado'] != true
+                        ? () {
+                            setState(() {
+                              modoSeleccion = true;
+                              multasSeleccionadas.add(multa['id']);
+                            });
+                          }
+                        : null,
                   ),
                 );
               },
@@ -230,93 +552,188 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
   }
 
   Future<void> procesarPago(Map<String, dynamic> gasto) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Realizar Pago'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Monto: Bs. ${gasto['monto']?.toString() ?? '0'}'),
-            Text('Descripción: ${gasto['descripcion'] ?? ''}'),
-            const SizedBox(height: 16),
-            const Text('¿Confirmar pago?'),
-          ],
+    final monto = num.tryParse(gasto['monto'].toString())?.toDouble() ?? 0.0;
+    final concepto =
+        'Pago de gasto: ${gasto['descripcion'] ?? 'Sin descripción'}';
+
+    // Navegar a la pasarela de pago
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PasarelaPagoScreen(
+          monto: monto,
+          concepto: concepto,
+          descripcion: gasto['descripcion'],
+          onPagoCompletado: (transaccion) async {
+            if (transaccion.estado == EstadoPago.exitoso) {
+              try {
+                // Registrar el pago en el backend con datos completos
+                await ApiService().pagarGasto(
+                  gasto['id'],
+                  montoPagado: transaccion.monto,
+                  metodoPago: transaccion.metodo.codigo,
+                  referencia: transaccion.referencia,
+                );
+
+                if (mounted) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Pago procesado exitosamente'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+
+                  // Actualización optimista: marcar como pagado en la UI
+                  setState(() {
+                    gasto['pagado'] = true;
+                  });
+
+                  // Recargar la lista de pagos
+                  final api = ApiService();
+                  final nuevosPagos = await api.fetchPagos().catchError(
+                    (e) => pagos ?? <dynamic>[],
+                  );
+                  setState(() {
+                    pagos = nuevosPagos;
+                  });
+                }
+              } catch (e) {
+                if (mounted) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Error al registrar pago: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            }
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Pagar'),
-          ),
-        ],
       ),
     );
-
-    if (confirmed == true) {
-      try {
-        await ApiService().post('api/finanzas/gastos/${gasto['id']}/pagar/', {
-          'metodo_pago': 'transferencia',
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Pago procesado exitosamente'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          cargarFinanzas();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error al procesar pago: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
   }
 
   Future<void> pagarMulta(Map<String, dynamic> multa) async {
+    final monto = num.tryParse(multa['monto'].toString())?.toDouble() ?? 0.0;
+    final concepto = 'Pago de multa: ${multa['concepto'] ?? 'Sin concepto'}';
+
+    // Navegar a la pasarela de pago
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PasarelaPagoScreen(
+          monto: monto,
+          concepto: concepto,
+          descripcion: multa['concepto'],
+          onPagoCompletado: (transaccion) async {
+            if (transaccion.estado == EstadoPago.exitoso) {
+              try {
+                // Registrar el pago en el backend con datos completos
+                await ApiService().pagarMulta(
+                  multa['id'],
+                  montoPagado: transaccion.monto,
+                  metodoPago: transaccion.metodo.codigo,
+                  referencia: transaccion.referencia,
+                );
+
+                if (mounted) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Multa pagada exitosamente'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+
+                  // Actualización optimista: marcar como pagada en la UI
+                  setState(() {
+                    multa['pagado'] = true;
+                  });
+
+                  // Recargar la lista de pagos
+                  final api = ApiService();
+                  final nuevosPagos = await api.fetchPagos().catchError(
+                    (e) => pagos ?? <dynamic>[],
+                  );
+                  setState(() {
+                    pagos = nuevosPagos;
+                  });
+                }
+              } catch (e) {
+                if (mounted) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Error al pagar multa: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  void mostrarComprobante(Map<String, dynamic> pago) async {
     try {
-      await ApiService().post('api/finanzas/multas/${multa['id']}/pagar/', {
-        'metodo_pago': 'transferencia',
-      });
+      final comprobanteData = await ApiService().obtenerComprobantePago(
+        pago['id'],
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Multa pagada exitosamente'),
+          SnackBar(
+            content: Text(
+              'Comprobante descargado: ${comprobanteData['file'] ?? 'comprobante.pdf'}',
+            ),
+            duration: const Duration(seconds: 3),
             backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'Ver',
+              onPressed: () {
+                // Aquí se podría abrir el comprobante
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Comprobante de Pago'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('ID Pago: ${pago['id']}'),
+                        Text('Monto: Bs. ${pago['monto_pagado']}'),
+                        Text('Fecha: ${pago['fecha_pago']}'),
+                        Text('Referencia: ${pago['referencia'] ?? 'N/A'}'),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cerrar'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         );
-        cargarFinanzas();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al pagar multa: $e'),
+            content: Text('Error al obtener comprobante: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
-  }
-
-  void mostrarComprobante(Map<String, dynamic> pago) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Descargando comprobante del pago ${pago['id']}'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 }
